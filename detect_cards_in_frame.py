@@ -23,18 +23,6 @@ def score_aspect_ratio_fit(w: int, h: int) -> float:
     return float(1.0 - abs(target - current))
 
 
-def _is_duplicate_center(new_approx: np.ndarray, existing_candidates: List[np.ndarray], threshold: int = 50) -> bool:
-    """Checks if a new contour center is too close to any existing candidate centers."""
-    if not existing_candidates:
-        return False
-    new_center = np.mean(new_approx.reshape(4, 2), axis=0)
-    for existing in existing_candidates:
-        existing_center = np.mean(existing.reshape(4, 2), axis=0)
-        if np.linalg.norm(new_center - existing_center) < threshold:
-            return True
-    return False
-
-
 def _is_sane_quad(approx: np.ndarray, total_area: int) -> bool:
     """Checks if a contour is convex, fits area bounds, has a reasonable aspect ratio, and extents."""
     if not cv2.isContourConvex(approx):
@@ -73,8 +61,6 @@ def _order_points(pts: np.ndarray) -> np.ndarray:
     rect[1] = pts[np.argmin(diff)]
     rect[3] = pts[np.argmax(diff)]
     return rect
-
-    import cv2
 
 
 def _is_duplicate_center(new_approx: np.ndarray, existing_candidates: List[np.ndarray], threshold: int = 20) -> bool:
