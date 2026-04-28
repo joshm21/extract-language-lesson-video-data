@@ -57,17 +57,27 @@ def color_variance(image: np.ndarray, quad: np.ndarray, min_variance: float = 10
 
 
 class CardCandidates:
-    def __init__(self, image, quads):
+    def __init__(self, image, quads, history=None):
         self.image = image
-        self.quads = quads  # List of all detected quads
+        self.quads = quads
+        # History stores tuples of (filter_name, passed_quads, rejected_quads)
+        self.history = history if history is not None else []
 
     def filter(self, func, *args, **kwargs):
-        """Applies a filter function and returns a new CardCandidates object."""
-        # This passes (image, quad, *args) to the function
-        new_quads = [q for q in self.quads if func(
-            self.image, q, *args, **kwargs)]
-        print(f"Filter {func.__name__}: {len(self.quads)} -> {len(new_quads)}")
-        return CardCandidates(self.image, new_quads)
+        passed = []
+        rejected = []
+
+        for q in self.quads:
+            if func(self.image, q, *args, **kwargs):
+                passed.append(q)
+            else:
+                rejected.append(q)
+
+        # Create a new history log for this step
+        new_history = self.history + [(func.__name__, passed, rejected)]
+        print(f"Filter {func.__name__}: {len(self.quads)} -> {len(passed)}")
+
+        return CardCandidates(self.image, passed, new_history)
 
 
 def visualize_decisions(image: np.ndarray, all_quads: List[np.ndarray], filtered_quads: List[np.ndarray]) -> np.ndarray:
@@ -76,3 +86,29 @@ def visualize_decisions(image: np.ndarray, all_quads: List[np.ndarray], filtered
     cv2.drawContours(output, all_quads, -1, (0, 0, 255), 2)
     cv2.drawContours(output, filtered_quads, -1, (0, 255, 0), 3)
     return output
+
+
+def visualize_waterfall(candidates: CardCandidates):
+    stages = []
+
+    for i, (name, passed, rejected) in enumerate(candidates.history):
+        # Create a clean canvas for this step
+        canvas = candidates.image.copy()
+        overlay = canvas.copy()
+
+        # 1. Draw REJECTED in Red with transparency
+        cv2.drawContours(overlay, rejected, -1, (0, 0, 255), 2)
+        # 2. Draw PASSED in Green (Solid)
+        cv2.drawContours(canvas, passed, -1, (0, 255, 0), 3)
+
+        # Blend the overlay (0.5 alpha makes rejected quads look faint)
+        cv2.addWeighted(overlay, 0.5, canvas, 0.7, 0, canvas)
+
+        # Add Label
+        label = f"Step {i+1}: {name} ({len(passed)} remain)"
+        cv2.putText(canvas, label, (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+        stages.append(canvas)
+
+    return stages

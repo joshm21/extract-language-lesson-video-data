@@ -55,17 +55,23 @@ def process_frame(artifacts_dir, cap, ts):
     cv2.imwrite(str(artifacts_dir / f'{ts_str}-frame.jpg'), frame)
 
     # detect
-    #raw_quads = detect.detect_basic(frame, thresh_val=150)
+    # raw_quads = detect.detect_basic(frame, thresh_val=150)
     raw_quads = detect.sweep_detect_cards(frame)
 
     # filter
     candidates = f.CardCandidates(frame, raw_quads)
     results = (candidates
-               .filter(f.relative_area, min_rel=0.001, max_rel=0.1))
+               .filter(f.relative_area, min_rel=0.002)
+               .filter(f.convexity)
+               .filter(f.extent)
+               .filter(f.color_variance)
+               )
 
-    # save visualization of detected vs filtered
-    vis = f.visualize_decisions(frame, raw_quads, results.quads)
-    cv2.imwrite(str(artifacts_dir / f"{ts_str}-vis.jpg"), vis)
+    # save filter visualization waterfall
+    gallery = f.visualize_waterfall(results)
+    for i, stage_img in enumerate(gallery):
+        cv2.imwrite(
+            str(artifacts_dir / f"{ts_str}-vis-{i+1:02d}.jpg"), stage_img)
 
     for quad in results.quads:
         card_crop = crop.get_perspective_transform(
