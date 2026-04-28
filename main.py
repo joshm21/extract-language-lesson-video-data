@@ -1,114 +1,81 @@
-import cv2
-import json
-import matplotlib.pyplot as plt
 from pathlib import Path
+import cv2
 
-import extract_segment_frames as extractor
-import detect_cards_in_frame as detector
-import filter_picture_cards as filterer
-import crop_cards as cropper
-import deduplicate_images as deduper
-
-
-def save_debug_visual(image, all_cards, winners, output_path):
-    """Saves a plot showing detection vs selection for debugging."""
-    plt.figure(figsize=(12, 8))
-    display_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    # Draw all candidates (Yellow)
-    for card in all_cards:
-        cv2.polylines(display_img, [card["raw_quad"]], True, (255, 255, 0), 2)
-
-    # Draw winners (Green)
-    for card in winners:
-        cv2.polylines(display_img, [card["raw_quad"]], True, (0, 255, 0), 5)
-
-    plt.imshow(display_img)
-    plt.title(
-        f"Candidates: {len(all_cards)} (Yellow) | Filtered Winners: {len(winners)} (Green)")
-    plt.axis('off')
-    plt.savefig(output_path)
-    plt.close()
+import extract
+import detect
+import filter as f
+import crop
+import dedupe
 
 
-def run_pipeline(video_id: str, debug: bool = False):
-    print(f"Starting pipeline for {video_id}")
-    work_dir = Path(f"data/{video_id}")
-    cache_dir = work_dir / "cache"
-    cache_dir.mkdir(exist_ok=True)
-    output_dir = work_dir / "unique_cards"
-    output_dir.mkdir(exist_ok=True)
-    debug_dir = work_dir / "debug"
-    if debug:
-        debug_dir.mkdir(exist_ok=True)
+def process_video(video_id, timestamps):
+    print(f"Processing {video_id}")
+    base_dir = Path(f"./data/{video_id}")
+    artifacts_dir = base_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    cropped_images = []
-    print('- loading segments')
-    with open(work_dir / "transcript.json", 'r') as f:
-        segments = json.load(f)['segments']
+    # clean out artifacts
+    for item in artifacts_dir.iterdir():
+        if item.is_file():
+            item.unlink()
 
-    for i, seg in enumerate(segments):
-        print(f'- segment {i+1}')
+    cap = cv2.VideoCapture(str(base_dir / "video.mp4"))
 
-        cache_pattern = f"seg_{seg['start']}_{seg['end']}_*.jpg"
-        existing_cache = list(cache_dir.glob(cache_pattern))
-        if existing_cache:
-            print('  * loading frame from cache')
-            cache_file = existing_cache[0]
-            frame = cv2.imread(str(cache_file))
-            # Extract timestamp: get the part between the last '_' and the '.jpg'
-            ts = float(cache_file.stem.split('_')[-1])
-        else:
-            print('  * extracting clear frame (slow run)')
-            frame, ts = extractor.get_clear_frame(
-                str(work_dir / "video.mp4"), seg['start'], seg['end'])
+    all_crops = []
+    for ts in timestamps:
+        new_crops = process_frame(artifacts_dir, cap, ts)
+        all_crops.extend(new_crops)
 
-            if frame is not None:
-                # Save to cache with the found timestamp in the name
-                cache_path = cache_dir / \
-                    f"seg_{seg['start']}_{seg['end']}_{ts:.3f}.jpg"
-                cv2.imwrite(str(cache_path), frame)
+    # done extracting frames; release video
+    cap.release()
 
-        if frame is None:
+    # dedupe crops from this video from any frame
+    seen_hashes = []
+    for crop in all_crops:
+        hash = dedupe.compute_phash(crop)
+        if dedupe.is_duplicate(hash, seen_hashes, threshold=20):
             continue
+        seen_hashes.append(hash)
+        filepath = str(artifacts_dir / f'unique{len(seen_hashes):03d}.jpg')
+        cv2.imwrite(filepath, crop)  # save unique crop
+    print(f'found {len(seen_hashes)} unique cards')
 
-        all_candidates = detector.get_all_candidates(frame)
-        print(f'  * detected {len(all_candidates)} cards in frame')
-        if debug:
-            # We strip the 'raw_quad' (numpy array) because it isn't JSON serializable
-            serializable_data = []
-            for c in all_candidates:
-                item = {k: v for k, v in c.items() if k != 'raw_quad'}
-                serializable_data.append(item)
-            with open(debug_dir / f"{ts:.3f}_all_candidates.json", 'w') as f:
-                json.dump(serializable_data, f, indent=4)
 
-        winners = filterer.filter_picture_cards(all_candidates)
-        print(f'  * filtered down to {len(winners)} picture cards')
-        if debug:
-            save_debug_visual(frame, all_candidates, winners,
-                              debug_dir / f"{ts:.3f}_visualize.jpg")
+def process_frame(artifacts_dir, cap, ts):
+    ts_str = f"{ts:05.1f}"  # eg 001.2 (seconds)
+    print(f"...frame {ts_str}")
+    frame_crops = []
 
-        # Deskew and Crop
-        print(f'  * deskewing and cropping')
-        for i, card in enumerate(winners):
-            cropped = cropper.deskew_and_crop(frame, card['coords'])
-            cropped_images.append(cropped)
+    # extract
+    frame = extract.extract_frame_at_time(cap, ts)
+    if frame is None:
 
-    print(f'- found {len(cropped_images)} card images across all frames')
+        return []
+    # save frame
+    cv2.imwrite(str(artifacts_dir / f'{ts_str}-frame.jpg'), frame)
 
-    unique_images = deduper.deduplicate_images(cropped_images)
-    print(f'  * {len(unique_images)} are unique')
+    # detect
+    #raw_quads = detect.detect_basic(frame, thresh_val=150)
+    raw_quads = detect.sweep_detect_cards(frame)
 
-    print(f'- emptying output directory and saving most recent unique cards')
-    if output_dir.exists():
-        for file in output_dir.iterdir():
-            if file.is_file():
-                file.unlink()
-    for i, img in enumerate(unique_images):
-        output_path = output_dir / f"card_{i+1:02d}.jpg"
-        cv2.imwrite(str(output_path), img)
+    # filter
+    candidates = f.CardCandidates(frame, raw_quads)
+    results = (candidates
+               .filter(f.relative_area, min_rel=0.001, max_rel=0.1))
+
+    # save visualization of detected vs filtered
+    vis = f.visualize_decisions(frame, raw_quads, results.quads)
+    cv2.imwrite(str(artifacts_dir / f"{ts_str}-vis.jpg"), vis)
+
+    for quad in results.quads:
+        card_crop = crop.get_perspective_transform(
+            frame, detect.order_points(quad))
+        frame_crops.append(card_crop)
+
+    return frame_crops
 
 
 if __name__ == "__main__":
-    run_pipeline("14QbqkeiSDtU62syzgaOVXhXRzBJWhaNN", debug=True)
+    video_id = "14QbqkeiSDtU62syzgaOVXhXRzBJWhaNN"
+    timestamps = list(range(0, 60, 10))  # [0, 2, 4, 6, 8]
+    process_video(video_id, timestamps)
