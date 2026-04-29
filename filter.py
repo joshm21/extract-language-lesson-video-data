@@ -1,113 +1,80 @@
 import cv2
 import numpy as np
-from typing import List, Callable, Dict, Any
-
-# --- SECTION 1: THE ATOMIC FILTERS ---
-
-
-def relative_area(image: np.ndarray, quad: np.ndarray, min_rel: float = 0.01, max_rel: float = 0.1) -> bool:
-    """Checks if the card area is a reasonable percentage of the total frame."""
-    frame_area = image.shape[0] * image.shape[1]
-    quad_area = cv2.contourArea(quad)
-    relative_area = quad_area / frame_area
-    return min_rel <= relative_area <= max_rel
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
 
 
-def convexity(image: np.ndarray, quad: np.ndarray) -> bool:
-    """Cards are physical rectangles; their detected corners should form a convex shape."""
-    return cv2.isContourConvex(quad)
-
-
-def aspect_ratio(image: np.ndarray, quad: np.ndarray, target: float = 0.714, tolerance: float = 0.1) -> bool:
-    """Checks if the width/height ratio matches a standard card (approx 0.714)."""
-    x, y, w, h = cv2.boundingRect(quad)
-    if h == 0:
-        return False
-    current = min(w, h) / max(w, h)
-    return abs(target - current) <= tolerance
-
-
-def extent(image: np.ndarray, quad: np.ndarray, min_extent: float = 0.7) -> bool:
-    """Measures how much of the bounding box is filled by the shape (1.0 is a perfect rectangle)."""
-    area = cv2.contourArea(quad)
-    x, y, w, h = cv2.boundingRect(quad)
-    extent = area / (w * h) if (w * h) > 0 else 0
-    return extent > min_extent
-
-
-def edge_density(image: np.ndarray, quad: np.ndarray, min_density: float = 0.05) -> bool:
-    """High edge density usually indicates complex card art rather than a blank table."""
-    # Note: In a workshop, students would use crop.py first or a simple ROI here
-    x, y, w, h = cv2.boundingRect(quad)
-    roi = image[y:y+h, x:x+w]
-    if roi.size == 0:
-        return False
-    edges = cv2.Canny(roi, 50, 150)
-    density = np.sum(edges > 0) / (roi.shape[0] * roi.shape[1])
-    return density > min_density
-
-
-def color_variance(image: np.ndarray, quad: np.ndarray, min_variance: float = 10.0) -> bool:
-    """Filters out monochrome objects (like white paper) by checking color variety."""
-    x, y, w, h = cv2.boundingRect(quad)
-    roi = image[y:y+h, x:x+w]
-    if roi.size == 0:
-        return False
-    return float(np.mean(np.std(roi, axis=(0, 1)))) > min_variance
+@dataclass
+class FilterStep:
+    prop: str
+    min: float = -float('inf')
+    max: float = float('inf')
 
 
 class CardCandidates:
-    def __init__(self, image, quads, history=None):
-        self.image = image
+    def __init__(self, quads: List[np.ndarray], scores: List[Dict[str, Any]], history: Optional[List] = None):
+        """
+        Initializes with quads and their pre-calculated scores.
+        """
+        # Ensure data integrity: every quad must have a corresponding score dictionary
+        assert len(quads) == len(
+            scores), f"Mismatch: {len(quads)} quads vs {len(scores)} scores"
+
         self.quads = quads
-        # History stores tuples of (filter_name, passed_quads, rejected_quads)
+        self.scores = scores
         self.history = history if history is not None else []
 
-    def filter(self, func, *args, **kwargs):
-        passed = []
-        rejected = []
+    def apply_filters(self, image: np.ndarray, config: List[FilterStep]):
+        """Executes the pipeline of FilterStep objects."""
+        current = self
+        for step in config:
+            current = current.filter_by_score(step)
+        return current
 
-        for q in self.quads:
-            if func(self.image, q, *args, **kwargs):
-                passed.append(q)
+    def filter_by_score(self, step: FilterStep):
+        """Filters the current candidates based on the provided FilterStep criteria."""
+        passed_quads = []
+        passed_scores = []
+        rejected_quads = []
+
+        for q, stats in zip(self.quads, self.scores):
+            val = stats.get(step.prop)
+
+            # Check if value exists and falls within the min/max range
+            if val is not None and step.min <= val <= step.max:
+                passed_quads.append(q)
+                passed_scores.append(stats)
             else:
-                rejected.append(q)
+                rejected_quads.append(q)
 
-        # Create a new history log for this step
-        new_history = self.history + [(func.__name__, passed, rejected)]
-        print(f"Filter {func.__name__}: {len(self.quads)} -> {len(passed)}")
+        # Log history snapshots for visualization
+        new_history = self.history + \
+            [(step.prop, passed_quads, rejected_quads)]
+        print(f"Filter {step.prop}: {len(self.quads)} -> {len(passed_quads)}")
 
-        return CardCandidates(self.image, passed, new_history)
-
-
-def visualize_decisions(image: np.ndarray, all_quads: List[np.ndarray], filtered_quads: List[np.ndarray]) -> np.ndarray:
-    """Draws ALL in Red, then overlaps SELECTED in Green."""
-    output = image.copy()
-    cv2.drawContours(output, all_quads, -1, (0, 0, 255), 2)
-    cv2.drawContours(output, filtered_quads, -1, (0, 255, 0), 3)
-    return output
+        return CardCandidates(passed_quads, passed_scores, new_history)
 
 
-def visualize_waterfall(candidates: CardCandidates):
+# --- VISUALIZATION ---
+def visualize_waterfall(image: np.ndarray, candidates: CardCandidates) -> List[np.ndarray]:
+    """Generates stages showing green (passed) and red (rejected) quads."""
     stages = []
 
-    for i, (name, passed, rejected) in enumerate(candidates.history):
-        # Create a clean canvas for this step
-        canvas = candidates.image.copy()
+    for i, (prop_name, passed, rejected) in enumerate(candidates.history):
+        canvas = image.copy()
         overlay = canvas.copy()
 
-        # 1. Draw REJECTED in Red with transparency
+        # Draw rejected quads in Red and passed in Green
         cv2.drawContours(overlay, rejected, -1, (0, 0, 255), 2)
-        # 2. Draw PASSED in Green (Solid)
         cv2.drawContours(canvas, passed, -1, (0, 255, 0), 3)
 
-        # Blend the overlay (0.5 alpha makes rejected quads look faint)
         cv2.addWeighted(overlay, 0.5, canvas, 0.7, 0, canvas)
 
-        # Add Label
-        label = f"Step {i+1}: {name} ({len(passed)} remain)"
-        cv2.putText(canvas, label, (20, 40),
+        # Labels for the step and current counts
+        cv2.putText(canvas, f"Step {i+1}: {prop_name}", (20, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(canvas, f"P: {len(passed)} | R: {len(rejected)}", (20, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
 
         stages.append(canvas)
 
