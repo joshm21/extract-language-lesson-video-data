@@ -77,6 +77,28 @@ def get_color_variance(image: np.ndarray, quad: np.ndarray) -> float:
     return float(np.mean(np.std(roi, axis=(0, 1))))
 
 
+def get_saturation_average(image: np.ndarray, quad: np.ndarray) -> float:
+    """
+    Calculates the average saturation within the quad.
+    Grayscale images will have very low saturation.
+    Colored images will have significantly higher saturation.
+    """
+    x, y, w, h = cv2.boundingRect(quad)
+    roi = image[y:y+h, x:x+w]
+
+    if roi.size == 0:
+        return 0.0
+
+    # Convert ROI to HSV color space
+    hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+
+    # Split channels (Hue, Saturation, Value)
+    _, s_channel, _ = cv2.split(hsv_roi)
+
+    # Return the average of the Saturation channel
+    return float(np.mean(s_channel))
+
+
 def get_mean_intensity(image: np.ndarray, quad: np.ndarray) -> float:
     """Calculates average grayscale intensity within the contour mask."""
     mask = np.zeros(image.shape[:2], dtype=np.uint8)

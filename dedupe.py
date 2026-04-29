@@ -34,7 +34,7 @@ def compute_phash(image: np.ndarray, hash_size: int = 8) -> np.ndarray:
 
 def get_hamming_distance(hash1: np.ndarray, hash2: np.ndarray) -> int:
     """
-    Counts how many bits differ between two hashes. 
+    Counts how many bits differ between two hashes.
     A distance of 0 means identical images.
     """
     return np.count_nonzero(hash1 != hash2)
@@ -48,3 +48,15 @@ def is_duplicate(current_hash: np.ndarray, seen_hashes: List[np.ndarray], thresh
         if get_hamming_distance(current_hash, existing_hash) <= threshold:
             return True
     return False
+
+
+def save_unique(dir_path, all, threshold=20):
+    seen = []
+    for img in all:
+        hash = compute_phash(img)
+        if is_duplicate(hash, seen, threshold):
+            continue
+        seen.append(hash)
+        filepath = str(dir_path / f'unique{len(seen):03d}.jpg')
+        cv2.imwrite(filepath, img)  # save unique crop
+    print(f'found {len(seen)} unique cards')

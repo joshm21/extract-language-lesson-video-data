@@ -45,11 +45,11 @@ class CardCandidates:
         rejected_quads = []
 
         for q, stats in zip(self.quads, self.scores):
-            
+
             val = stats.get(step.prop)
 
             if val is not None and step.min <= val <= step.max:
-                
+
                 passed_quads.append(q)
                 passed_scores.append(stats)
             else:
@@ -76,7 +76,7 @@ class CardCandidates:
         # 1. Headers
         coord_headers = [f"{axis}{i}" for i in range(
             1, 5) for axis in ('x', 'y')]
-        score_headers = list(self.all_scores[0].keys())
+        score_headers = sorted(list(self.all_scores[0].keys()))
         history_headers = [f"step_{i+1}_{name}" for i,
                            (name, _, _) in enumerate(self.history)]
 
@@ -105,8 +105,6 @@ class CardCandidates:
             writer.writeheader()
             writer.writerows(rows)
 
-# --- VISUALIZATION ---
-
 
 def visualize_waterfall(image: np.ndarray, candidates: CardCandidates) -> List[np.ndarray]:
     """Generates stages showing green (passed) and red (rejected) quads."""
@@ -126,10 +124,16 @@ def visualize_waterfall(image: np.ndarray, candidates: CardCandidates) -> List[n
         overlay = canvas.copy()
 
         # 1. Draw Contours using the unified color palette
-        # Passed quads get the bright green
-        cv2.drawContours(canvas, passed, -1, COLOR_PASS, 3)
-        # Rejected quads get the faded red
-        cv2.drawContours(overlay, rejected, -1, COLOR_REJECT, 2)
+        if passed:
+            # Convert quads to int32 and ensure they are shaped correctly for OpenCV
+            passed_to_draw = [np.int32(q).reshape((-1, 1, 2)) for q in passed]
+            cv2.drawContours(canvas, passed_to_draw, -1, COLOR_PASS, 3)
+
+        if rejected:
+            # Convert rejected quads similarly
+            rejected_to_draw = [np.int32(q).reshape(
+                (-1, 1, 2)) for q in rejected]
+            cv2.drawContours(overlay, rejected_to_draw, -1, COLOR_REJECT, 2)
 
         # Blend rejected overlay for a "ghosted" look
         cv2.addWeighted(overlay, 0.5, canvas, 0.7, 0, canvas)

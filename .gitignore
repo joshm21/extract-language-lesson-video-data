@@ -1,1 +1,3 @@
-venv
+**/artifacts/
+venv/
+__pycache__/

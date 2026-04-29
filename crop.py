@@ -8,7 +8,7 @@ def get_perspective_transform(image: np.ndarray, pts: np.ndarray, padding: int =
 
     Args:
         image: The source frame.
-        pts: The 4 corner points (should be ordered via detect.order_points).
+        pts: The 4 corner points (should be ordered).
         padding: Optional extra pixels to crop inward (to remove border artifacts).
     """
     # 1. Determine dimensions of the new image
@@ -38,3 +38,7 @@ def get_perspective_transform(image: np.ndarray, pts: np.ndarray, padding: int =
         warped = warped[padding:-padding, padding:-padding]
 
     return warped
+
+
+def all(frame, quads):
+    return [get_perspective_transform(frame, q) for q in quads]
