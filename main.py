@@ -3,7 +3,8 @@ import cv2
 
 import extract
 import detect
-import filter as f
+import score
+import filter as filt
 import crop
 import dedupe
 
@@ -31,13 +32,13 @@ def process_video(video_id, timestamps):
 
     # dedupe crops from this video from any frame
     seen_hashes = []
-    for crop in all_crops:
-        hash = dedupe.compute_phash(crop)
+    for img_crop in all_crops:
+        hash = dedupe.compute_phash(img_crop)
         if dedupe.is_duplicate(hash, seen_hashes, threshold=20):
             continue
         seen_hashes.append(hash)
         filepath = str(artifacts_dir / f'unique{len(seen_hashes):03d}.jpg')
-        cv2.imwrite(filepath, crop)  # save unique crop
+        cv2.imwrite(filepath, img_crop)  # save unique crop
     print(f'found {len(seen_hashes)} unique cards')
 
 
@@ -49,7 +50,6 @@ def process_frame(artifacts_dir, cap, ts):
     # extract
     frame = extract.extract_frame_at_time(cap, ts)
     if frame is None:
-
         return []
     # save frame
     cv2.imwrite(str(artifacts_dir / f'{ts_str}-frame.jpg'), frame)
@@ -58,17 +58,19 @@ def process_frame(artifacts_dir, cap, ts):
     # raw_quads = detect.detect_basic(frame, thresh_val=150)
     raw_quads = detect.sweep_detect_cards(frame)
 
+    # score
+    scores = [score.score_quad(frame, q) for q in raw_quads]
+
     # filter
-    candidates = f.CardCandidates(frame, raw_quads)
-    results = (candidates
-               .filter(f.relative_area, min_rel=0.002)
-               .filter(f.convexity)
-               .filter(f.extent)
-               .filter(f.color_variance)
-               )
+    candidates = filt.CardCandidates(raw_quads, scores)
+    filter_config = [
+        filt.FilterStep(prop="relative_area", min=0.002, max=0.1),
+        filt.FilterStep(prop="convexity", min=0.9)
+    ]
+    results = candidates.apply_filters(filter_config)
 
     # save filter visualization waterfall
-    gallery = f.visualize_waterfall(results)
+    gallery = filt.visualize_waterfall(frame, results)
     for i, stage_img in enumerate(gallery):
         cv2.imwrite(
             str(artifacts_dir / f"{ts_str}-vis-{i+1:02d}.jpg"), stage_img)
