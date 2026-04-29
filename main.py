@@ -69,7 +69,8 @@ def process_frame(artifacts_dir, cap, ts):
     ]
     results = candidates.apply_filters(filter_config)
 
-    # save filter visualization waterfall
+    # save results csv and visualization waterfall
+    results.to_csv(str(artifacts_dir / f"{ts_str}-data.csv"))
     gallery = filt.visualize_waterfall(frame, results)
     for i, stage_img in enumerate(gallery):
         cv2.imwrite(

@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from typing import List, Dict, Optional
 from dataclasses import dataclass
+import csv
 
 
 @dataclass
@@ -12,7 +13,10 @@ class FilterStep:
 
 
 class CardCandidates:
-    def __init__(self, quads: List[np.ndarray], scores: List[Dict[str, float]], history: Optional[List] = None):
+    def __init__(self, quads: List[np.ndarray], scores: List[Dict[str, float]],
+                 history: Optional[List] = None,
+                 all_quads: Optional[List] = None,
+                 all_scores: Optional[List] = None):
         """
         Initializes with quads and their pre-calculated scores.
         """
@@ -24,6 +28,10 @@ class CardCandidates:
         self.scores = scores
         self.history = history if history is not None else []
 
+        # Keep track of the original population for the CSV
+        self.all_quads = all_quads if all_quads is not None else quads
+        self.all_scores = all_scores if all_scores is not None else scores
+
     def apply_filters(self, config: List[FilterStep]):
         """Executes the pipeline of FilterStep objects."""
         current = self
@@ -33,28 +41,73 @@ class CardCandidates:
 
     def filter_by_score(self, step: FilterStep):
         """Filters the current candidates based on the provided FilterStep criteria."""
-        passed_quads = []
-        passed_scores = []
+        passed_quads, passed_scores = [], []
         rejected_quads = []
 
         for q, stats in zip(self.quads, self.scores):
+            
             val = stats.get(step.prop)
 
-            # Check if value exists and falls within the min/max range
             if val is not None and step.min <= val <= step.max:
+                
                 passed_quads.append(q)
                 passed_scores.append(stats)
             else:
                 rejected_quads.append(q)
 
-        # Log history snapshots for visualization
+        # History only needs to store the quad references for pass/fail tracking
         new_history = self.history + \
             [(step.prop, passed_quads, rejected_quads)]
 
-        return CardCandidates(passed_quads, passed_scores, new_history)
+        # Pass the master lists (all_quads/all_scores) to the next object
+        return CardCandidates(
+            passed_quads,
+            passed_scores,
+            new_history,
+            all_quads=self.all_quads,
+            all_scores=self.all_scores
+        )
 
+    def to_csv(self, filepath: str):
+        """Exports all original quads, their scores, and pass/fail history."""
+        if not self.all_quads:
+            return
+
+        # 1. Headers
+        coord_headers = [f"{axis}{i}" for i in range(
+            1, 5) for axis in ('x', 'y')]
+        score_headers = list(self.all_scores[0].keys())
+        history_headers = [f"step_{i+1}_{name}" for i,
+                           (name, _, _) in enumerate(self.history)]
+
+        fieldnames = coord_headers + score_headers + history_headers
+
+        # 2. Build rows using the master lists
+        rows = []
+        for quad, stats in zip(self.all_quads, self.all_scores):
+            # Flatten coords
+            coords = quad.reshape(-1)
+            row = {coord_headers[i]: val for i, val in enumerate(
+                coords) if i < len(coord_headers)}
+
+            # Add original scores
+            row.update(stats)
+
+            # 3. Check pass/fail status against each history snapshot
+            for i, (_, passed_list, _) in enumerate(self.history):
+                is_pass = any(np.array_equal(quad, p) for p in passed_list)
+                row[history_headers[i]] = "PASS" if is_pass else "FAIL"
+
+            rows.append(row)
+
+        with open(filepath, mode='w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
 
 # --- VISUALIZATION ---
+
+
 def visualize_waterfall(image: np.ndarray, candidates: CardCandidates) -> List[np.ndarray]:
     """Generates stages showing green (passed) and red (rejected) quads."""
     stages = []
