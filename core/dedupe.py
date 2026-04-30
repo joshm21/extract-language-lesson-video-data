@@ -50,7 +50,7 @@ def is_duplicate(current_hash: np.ndarray, seen_hashes: List[np.ndarray], thresh
     return False
 
 
-def get_unique(all, threshold=20):
+def get_unique(all, threshold: int = 20):
     unique = []
     seen = []
     for img in all:

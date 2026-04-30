@@ -1,100 +1,77 @@
-import cv2
-import numpy as np
-import csv
-import dataclasses
-from typing import List, Optional
-from .score import ScoreCard
+from functools import partial
+from typing import Dict
+from . import visualize as viz
+
+# --- Generic Filter Engine ---
 
 
-@dataclasses.dataclass
-class QuadCandidate:
+def _apply_threshold(
+    state: Dict,
+    metric_name: str,
+    min: float = -float('inf'),
+    max: float = float('inf')
+) -> Dict:
     """
-    The single source of truth for a detected quad.
-    Stores the geometry (points) and the metrics (score) in one object.
+    Core logic: Filters quads based on the previous pass and generates visualization.
     """
-    points: np.ndarray
-    score: ScoreCard
+    all_quads = state.get("quads", [])
+    all_scores = state.get("scores", [])
+    raw_image = state.get("raw_frame")
+
+    # Get indices that survived previous filters, or start with all
+    prev_indices = state.get("passed_indices", list(range(len(all_quads))))
+
+    current_passed = []
+    for idx in prev_indices:
+        score_val = all_scores[idx].get(metric_name, 0)
+        if min <= score_val <= max:
+            current_passed.append(idx)
+
+    # Calculate who was "killed" in this specific step for the red group
+    rejected_this_step = [i for i in prev_indices if i not in current_passed]
+
+    # --- Group for visualize.py ---
+    # Passing 2 groups: (quads, labels, color)
+    green_group = {
+        'quads': [all_quads[i] for i in current_passed],
+        'labels': [f"{i}" for i in current_passed],
+        'color': (0, 255, 0)
+    }
+
+    red_group = {
+        'quads': [all_quads[i] for i in rejected_this_step],
+        'labels': [f"{i}" for i in rejected_this_step],
+        'color': (0, 0, 255)
+    }
+
+    viz_image = viz.draw_multiple_quad_groups(
+        raw_image, [green_group, red_group])
+
+    return {
+        "passed_indices": current_passed,
+        "auto_save": viz_image  # Runner handles the saving
+    }
+
+# --- Manually Defined Wrappers for Perfect Intellisense ---
 
 
-class CardCandidates:
-    def __init__(self, quads: List[QuadCandidate], history: Optional[List] = None, all_quads: Optional[List] = None):
-        self.quads = quads
-        self.history = history if history is not None else []
-        # Store a reference to the initial list for final reporting
-        self.all_quads = all_quads if all_quads is not None else quads
-
-    def apply_filter_step(self, name: str, filter_func):
-        """Runs a filter and returns a new container with the history updated."""
-        passed, rejected = [], []
-
-        for q in self.quads:
-            if filter_func(q):  # IntelliSense works here!
-                passed.append(q)
-            else:
-                rejected.append(q)
-
-        new_history = self.history + [(name, passed, rejected)]
-        return CardCandidates(passed, new_history, self.all_quads)
-
-    def to_csv(self, filepath: str):
-        """Exports all quads and their scores to a CSV file."""
-        if not self.all_quads:
-            return
-
-        # 1. Dynamically build headers from coordinates and ScoreCard fields
-        coord_headers = [f"{ax}{i}" for i in range(1, 5) for ax in ('x', 'y')]
-        score_keys = [f.name for f in dataclasses.fields(ScoreCard)]
-        history_headers = [f"step_{i+1}_{name}" for i,
-                           (name, _, _) in enumerate(self.history)]
-
-        fieldnames = coord_headers + score_keys + history_headers
-
-        rows = []
-        for q_obj in self.all_quads:
-            # Add coordinates
-            row = {coord_headers[i]: val for i,
-                   val in enumerate(q_obj.points.reshape(-1))}
-
-            # Add scores (no redundancy, directly from the dataclass)
-            row.update(dataclasses.asdict(q_obj.score))
-
-            # Add pass/fail status for every step in the history
-            for i, (_, passed_list, _) in enumerate(self.history):
-                # Using 'is' for identity check to be fast and precise
-                is_pass = any(q_obj is p for p in passed_list)
-                row[history_headers[i]] = "PASS" if is_pass else "FAIL"
-            rows.append(row)
-
-        with open(filepath, mode='w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows)
+def _make_filter(name):
+    """Helper to create a partial and name it correctly for the runner."""
+    p = partial(_apply_threshold, metric_name=name)
+    p.__name__ = name  # This is the key for Intellisense and naming
+    p.__module__ = __name__  # Force module to be filter
+    return p
 
 
-def visualize_waterfall(image: np.ndarray, candidates: CardCandidates) -> List[np.ndarray]:
-    """Generates the visual history of the filtering process."""
-    stages = []
-    COLOR_PASS, COLOR_REJECT = (0, 255, 0), (0, 0, 180)
-
-    for i, (name, passed, rejected) in enumerate(candidates.history):
-        canvas = image.copy()
-
-        # Ensure points are int32 and have the shape (N, 1, 2) for OpenCV
-        if passed:
-            passed_contours = [np.int32(q.points).reshape(
-                (-1, 1, 2)) for q in passed]
-            cv2.drawContours(canvas, passed_contours, -
-                             1, COLOR_PASS, 3)
-
-        if rejected:
-            overlay = canvas.copy()
-            rejected_contours = [np.int32(q.points).reshape(
-                (-1, 1, 2)) for q in rejected]
-            cv2.drawContours(overlay, rejected_contours, -
-                             1, COLOR_REJECT, 2)
-            cv2.addWeighted(overlay, 0.5, canvas, 0.5, 0, canvas)
-
-        cv2.putText(canvas, f"Step {i+1}: {name}", (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-        stages.append(canvas)
-    return stages
+aspect_ratio = _make_filter("aspect_ratio")
+extent = _make_filter("extent")
+solidity = _make_filter("solidity")
+convexity = _make_filter("convexity")
+area = _make_filter("area")
+relative_area = _make_filter("relative_area")
+equivalent_diameter = _make_filter("equivalent_diameter")
+orientation = _make_filter("orientation")
+color_variance = _make_filter("color_variance")
+saturation_average = _make_filter("saturation_average")
+mean_intensity = _make_filter("mean_intensity")
+edge_density = _make_filter("edge_density")

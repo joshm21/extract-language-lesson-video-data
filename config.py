@@ -1,47 +1,47 @@
 from functools import partial
 
-from core import timestamps
-from core import extract
-from core import prepare
-from core import mask
-from core import detect
-from core import score
-from core import filter as filt
-from core import crop
-from core import dedupe
+from core import (load, timestamps, extract, prepare,
+                  detect, score, filter as filt, crop, dedupe)
 
-CONFIG = {
-    # TIME: Video -> List of Timestamps
-    "timer": partial(timestamps.uniform, count=6),
 
-    # EXTRACT: Video + List of Timestamps -> Raw Image Frames
-    "extractor": extract.extract_frame_at_time,
+# --- 1. DATA SCOPE ---
+# Which videos are we running?
+VIDEOS = load.test_video
 
-    # PROCESS: Raw Image Frame -> Processed Image
-    "processing": [
-        {"name": "gray",    "func": partial(prepare.get_grayscale)},
-        {"name": "blurred", "func": partial(prepare.apply_blur, ksize=7)},
-        {"name": "canny",   "func": partial(mask.canny, low=50, high=150)},
-        {"name": "closed",  "func": partial(
-            prepare.apply_close, kernel_size=3)},
-    ],
+# --- 2. SAMPLING STRATEGY ---
+# How do we pick timestamps for each video?
+TIMESTAMPS = partial(timestamps.every_n_seconds, n=20)
 
-    # DETECT: Find the initial quads
-    "detector": partial(detect.get_quads, min_area=300),
+# --- 3. THE FRAME PIPELINE ---
+# What happens to every single extracted frame?
+FRAME_PIPELINE = [
+    extract.at_current_timestamp,
 
-    # SCORE: Score each quad
-    "scorer": partial(score.score_quad),
+    #    prepare.to_grayscale,
+    #    partial(prepare.to_blurred, ksize=5),
+    #    partial(prepare.at_adaptive_threshold,
+    #            block_size=15, c_val=5),
+    #    partial(prepare.do_closing, kernel_size=3),
 
-    # FILTER: Quad -> Boolean (Keep/Drop)
-    "filters": [
-        {"name": "area",   "func": lambda q: q.score.relative_area > 0.001},
-        {"name": "convex", "func": lambda q: q.score.convexity > 0.9},
-        {"name": "sat",    "func": lambda q: q.score.saturation > 20},
-    ],
+    prepare.to_grayscale,
+    partial(prepare.to_blurred, ksize=3),
+    partial(prepare.at_canny_edges, low=50, high=200),
+    partial(prepare.do_dilation, kernel_size=3, iterations=1),
+    partial(prepare.do_closing, kernel_size=10),
 
-    # CROP: Raw Image Frame + Quad -> Cropped Card
-    "cropper": crop.all,
+    partial(detect.find_quads, min_area=50, epsilon=0.03),
+    score.all_quads,
 
-    # DEDUPE: Get unique cropped cards
-    "deduper": partial(dedupe.get_unique, threshold=10)
-}
+    partial(filt.area, min=4000),
+
+    crop.passed_quads
+
+
+]
+
+# --- 4. VIDEO POST-PROCESSING ---
+# What happens once after all frames in a video are processed?
+VIDEO_POST_PROCESS = partial(dedupe.get_unique, threshold=20)
+
+#   clustering (k clusters)
+#   selecting (selecting right cluster)

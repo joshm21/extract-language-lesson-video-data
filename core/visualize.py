@@ -1,29 +1,58 @@
 import cv2
-from pathlib import Path
 import numpy as np
-from typing import List
+from typing import List, Tuple, TypedDict
 
 
-class PipelineVisualizer:
-    def __init__(self, output_dir: Path, timestamp: str):
-        self.output_dir = output_dir
-        self.ts_str = timestamp
-        self.step_index = 1
+class QuadGroup(TypedDict):
+    quads: List[np.ndarray]
+    labels: List[str]
+    color: Tuple[int, int, int]
 
-    def save(self, image, label: str):
-        """
-        Saves the image with an auto-incrementing prefix.
-        Example: 001.2_01_original.jpg, 001.2_02_gray.jpg
-        """
-        filename = f"{self.ts_str}_{self.step_index:02d}_{label}.jpg"
-        filepath = self.output_dir / filename
-        cv2.imwrite(str(filepath), image)
-        self.step_index += 1
 
-    def save_list(self, images: List[np.ndarray], base_label: str):
-        """Saves a series of images (like a waterfall) with sub-indices."""
-        for i, img in enumerate(images):
-            # Example: 001.2_05_waterfall_01.jpg
-            filename = f"{self.ts_str}_{self.step_index:02d}_{base_label}_{i+1:02d}.jpg"
-            cv2.imwrite(str(self.output_dir / filename), img)
-        self.step_index += 1
+def draw_multiple_quad_groups(
+    image: np.ndarray,
+    groups: List[QuadGroup]
+) -> np.ndarray:
+    """
+    Draws multiple groups of contours and labels on an image.
+
+    Args:
+        image: The canvas to draw on.
+        groups: A list of dictionaries, each containing:
+                - 'quads': List of 4-point polygons.
+                - 'labels': List of strings corresponding to each quad.
+                - 'color': BGR tuple for that group.
+    """
+    canvas = image.copy()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 1.0
+    thickness = 2
+
+    for group in groups:
+        quads = group['quads']
+        labels = group['labels']
+        color = group['color']
+
+        for quad, label in zip(quads, labels):
+            # 1. Draw the polygon border
+            cv2.drawContours(canvas, [quad], -1, color, 3)
+
+            # 2. Calculate Centered Text Position
+            M = cv2.moments(quad)
+            if M["m00"] != 0:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+
+                (t_w, t_h), _ = cv2.getTextSize(label, font, scale, thickness)
+
+                # Center the text[cite: 1]
+                text_x = cX - (t_w // 2)
+                text_y = cY + (t_h // 2)
+
+                # 3. Draw Shadow (Black) then Foreground (Color)[cite: 1]
+                cv2.putText(canvas, str(label), (text_x + 1, text_y + 1),
+                            font, scale, (0, 0, 0), thickness + 1)
+                cv2.putText(canvas, str(label), (text_x, text_y),
+                            font, scale, color, thickness)
+
+    return canvas

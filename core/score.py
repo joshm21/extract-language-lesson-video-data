@@ -1,50 +1,42 @@
 import cv2
 import numpy as np
-import inspect
-import sys
-from typing import Dict
-from dataclasses import dataclass
+from typing import Dict, List, Callable
+
+# A registry to hold all functions that return a score
+METRIC_REGISTRY: Dict[str, Callable] = {}
 
 
-@dataclass
-class ScoreCard:
-    """
-    Container for quad metrics to provide IntelliSense in config.py.
-    """
-    aspect_ratio: float
-    extent: float
-    solidity: float
-    convexity: float
-    area: float
-    relative_area: float
-    equivalent_diameter: float
-    orientation: float
-    color_variance: float
-    saturation: float
-    mean_intensity: float
-    edge_density: float
+def metric(func):
+    """Decorator to register a function as a score metric."""
+    METRIC_REGISTRY[func.__name__.replace("get_", "")] = func
+    return func
 
 
-def score_quad(image: np.ndarray, quad: np.ndarray) -> ScoreCard:
-    """
-    Explicitly calculates metrics and returns a structured ScoreCard.
-    """
-    return ScoreCard(
-        aspect_ratio=get_aspect_ratio(image, quad),
-        extent=get_extent(image, quad),
-        solidity=get_solidity(image, quad),
-        convexity=get_convexity(image, quad),
-        area=get_area(image, quad),
-        relative_area=get_relative_area(image, quad),
-        equivalent_diameter=get_equivalent_diameter(image, quad),
-        orientation=get_orientation(image, quad),
-        color_variance=get_color_variance(image, quad),
-        saturation=get_saturation_average(image, quad),
-        mean_intensity=get_mean_intensity(image, quad),
-        edge_density=get_edge_density(image, quad)
-    )
+def all_quads(state: Dict) -> Dict:
+    """Processes all registered scoring metrics for all quads."""
+    image = state.get("current_image")
+    quads = state.get("quads", [])
+
+    if image is None or not quads:
+        return {"scores": []}
+
+    metric_names = sorted(METRIC_REGISTRY.keys())
+    header = ["quad_index"] + metric_names
+
+    scores_for_state = []
+    rows_for_csv = [header,]
+    for i, quad in enumerate(quads):
+        # Dictionary comprehension: runs every @metric function automatically
+        quad_scores = {name: fn(image, quad)
+                       for name, fn in METRIC_REGISTRY.items()}
+        scores_for_state.append(quad_scores)
+        row = [i] + [quad_scores[name] for name in metric_names]
+        rows_for_csv.append(row)
+
+    return {"scores": scores_for_state, "auto_save": rows_for_csv}
 
 
+@metric
 def get_aspect_ratio(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the ratio of width to height of the bounding rect."""
     x, y, w, h = cv2.boundingRect(quad)
@@ -53,6 +45,7 @@ def get_aspect_ratio(image: np.ndarray, quad: np.ndarray) -> float:
     return float(w) / h
 
 
+@metric
 def get_extent(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the ratio of contour area to bounding rectangle area."""
     area = cv2.contourArea(quad)
@@ -63,6 +56,7 @@ def get_extent(image: np.ndarray, quad: np.ndarray) -> float:
     return float(area) / rect_area
 
 
+@metric
 def get_solidity(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the ratio of contour area to convex hull area."""
     area = cv2.contourArea(quad)
@@ -73,16 +67,19 @@ def get_solidity(image: np.ndarray, quad: np.ndarray) -> float:
     return float(area) / hull_area
 
 
+@metric
 def get_convexity(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns 1.0 if the shape is convex, 0.0 otherwise."""
     return 1.0 if cv2.isContourConvex(quad) else 0.0
 
 
+@metric
 def get_area(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the absolute area of the contour in pixels."""
     return float(cv2.contourArea(quad))
 
 
+@metric
 def get_relative_area(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the quad area as a percentage of the total frame area."""
     frame_area = image.shape[0] * image.shape[1]
@@ -92,12 +89,14 @@ def get_relative_area(image: np.ndarray, quad: np.ndarray) -> float:
     return float(quad_area / frame_area)
 
 
+@metric
 def get_equivalent_diameter(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the diameter (in pixels) of the circle with the same area as the contour."""
     area = cv2.contourArea(quad)
     return float(np.sqrt(4 * area / np.pi))
 
 
+@metric
 def get_orientation(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the rotation angle using the Minimum Area Rectangle."""
     # rect is ((center_x, center_y), (width, height), angle)
@@ -105,6 +104,7 @@ def get_orientation(image: np.ndarray, quad: np.ndarray) -> float:
     return float(rect[2])
 
 
+@metric
 def get_color_variance(image: np.ndarray, quad: np.ndarray) -> float:
     """Measures color variety by checking the mean of standard deviations across color channels."""
     x, y, w, h = cv2.boundingRect(quad)
@@ -114,6 +114,7 @@ def get_color_variance(image: np.ndarray, quad: np.ndarray) -> float:
     return float(np.mean(np.std(roi, axis=(0, 1))))
 
 
+@metric
 def get_saturation_average(image: np.ndarray, quad: np.ndarray) -> float:
     """
     Calculates the average saturation within the quad.
@@ -136,6 +137,7 @@ def get_saturation_average(image: np.ndarray, quad: np.ndarray) -> float:
     return float(np.mean(s_channel))
 
 
+@metric
 def get_mean_intensity(image: np.ndarray, quad: np.ndarray) -> float:
     """Calculates average grayscale intensity within the contour mask."""
     mask = np.zeros(image.shape[:2], dtype=np.uint8)
@@ -145,6 +147,7 @@ def get_mean_intensity(image: np.ndarray, quad: np.ndarray) -> float:
     return float(mean_intensity)
 
 
+@metric
 def get_edge_density(image: np.ndarray, quad: np.ndarray) -> float:
     """Returns the density of Canny edges within the quad bounding box."""
     x, y, w, h = cv2.boundingRect(quad)

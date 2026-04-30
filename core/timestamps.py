@@ -1,54 +1,45 @@
 import cv2
-from typing import List
+from typing import List, Dict
 
 
-def uniform(cap: cv2.VideoCapture, count: int = 5) -> List[float]:
-    """
-    Generates a list of timestamps evenly spaced across the entire video.
-
-    Args:
-        cap: The open cv2.VideoCapture object.
-        count: The total number of timestamps to generate. 
-               e.g., 3 will return [start, middle, end].
-
-    Returns:
-        A list of floats representing seconds.
-    """
-    if count <= 1:
-        return [0.0]
+def _get_video_duration(data_dir, video_id):
+    """Internal helper to get duration without leaving handles open."""
+    video_path = data_dir / video_id / "video.mp4"
+    cap = cv2.VideoCapture(str(video_path))
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    if total_frames <= 1:
-        return [0.0]
-
-    # Subtract 1 frame to be safe
     duration = (total_frames - 1) / fps if fps > 0 else 0
+    cap.release()
+    return duration
 
-    return [i * (duration / (count - 1)) for i in range(count)]
+
+def uniform(state: Dict, count: int = 5) -> Dict:
+    """Generates evenly spaced timestamps across the video."""
+    duration = _get_video_duration(state["data_dir"], state["video_id"])
+
+    if count <= 1:
+        ts_list = [0.0]
+    else:
+        ts_list = [i * (duration / (count - 1)) for i in range(count)]
+
+    return {"timestamps": ts_list}
 
 
-def every_n_seconds(cap: cv2.VideoCapture, n: float = 1.0) -> List[float]:
-    """
-    Generates a list of timestamps at a fixed interval until the end of the video.
+def every_n_seconds(state: Dict, n: float = 1.0) -> Dict:
+    """Generates timestamps at fixed intervals until the video ends."""
+    duration = _get_video_duration(state["data_dir"], state["video_id"])
 
-    Args:
-        cap: The open cv2.VideoCapture object.
-        n: The interval in seconds between each timestamp.
-
-    Returns:
-        A list of floats representing seconds.
-    """
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = total_frames / fps if fps > 0 else 0
-
-    timestamps = []
+    ts_list = []
     current_time = 0.0
-
     while current_time <= duration:
-        timestamps.append(round(current_time, 2))
+        ts_list.append(round(current_time, 2))
         current_time += n
 
-    return timestamps
+    return {"timestamps": ts_list}
+
+
+def at(state: Dict, seconds: float = 0.0) -> Dict:
+    """Focuses the pipeline on a single specific timestamp."""
+    return {"timestamps": [float(seconds)]}
