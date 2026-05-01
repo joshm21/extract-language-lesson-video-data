@@ -1,18 +1,21 @@
-from functools import partial
 from typing import Dict
 from . import visualize as viz
 
-# --- Generic Filter Engine ---
 
-
-def _apply_threshold(
+def apply(
     state: Dict,
-    metric_name: str,
+    prop: str,
     min: float = -float('inf'),
     max: float = float('inf')
 ) -> Dict:
     """
-    Core logic: Filters quads based on the previous pass and generates visualization.
+    Filters quads based on a specific metric and generates visualization.
+
+    Args:
+        state: Current frame state.
+        prop: The prop to filter by (use score.props).
+        min_val: Minimum threshold.
+        max_val: Maximum threshold.
     """
     all_quads = state.get("quads", [])
     all_scores = state.get("scores", [])
@@ -23,7 +26,7 @@ def _apply_threshold(
 
     current_passed = []
     for idx in prev_indices:
-        score_val = all_scores[idx].get(metric_name, 0)
+        score_val = all_scores[idx].get(prop, 0)
         if min <= score_val <= max:
             current_passed.append(idx)
 
@@ -49,29 +52,5 @@ def _apply_threshold(
 
     return {
         "passed_indices": current_passed,
-        "auto_save": viz_image  # Runner handles the saving
+        "auto_save": viz_image
     }
-
-# --- Manually Defined Wrappers for Perfect Intellisense ---
-
-
-def _make_filter(name):
-    """Helper to create a partial and name it correctly for the runner."""
-    p = partial(_apply_threshold, metric_name=name)
-    p.__name__ = name  # This is the key for Intellisense and naming
-    p.__module__ = __name__  # Force module to be filter
-    return p
-
-
-aspect_ratio = _make_filter("aspect_ratio")
-extent = _make_filter("extent")
-solidity = _make_filter("solidity")
-convexity = _make_filter("convexity")
-area = _make_filter("area")
-relative_area = _make_filter("relative_area")
-equivalent_diameter = _make_filter("equivalent_diameter")
-orientation = _make_filter("orientation")
-color_variance = _make_filter("color_variance")
-saturation_average = _make_filter("saturation_average")
-mean_intensity = _make_filter("mean_intensity")
-edge_density = _make_filter("edge_density")

@@ -1,6 +1,27 @@
 import cv2
 import numpy as np
-from typing import Dict, List, Callable
+from typing import Dict, Callable
+from dataclasses import dataclass
+
+
+# THE AUTOCOMPLETE CLASS (For config.py usage)
+
+@dataclass(frozen=True)
+class props:
+    """Namespace for metric names to provide autocomplete in config."""
+    aspect_ratio: str = "aspect_ratio"
+    extent: str = "extent"
+    solidity: str = "solidity"
+    convexity: str = "convexity"
+    area: str = "area"
+    relative_area: str = "relative_area"
+    equivalent_diameter: str = "equivalent_diameter"
+    orientation: str = "orientation"
+    color_variance: str = "color_variance"
+    saturation_average: str = "saturation_average"
+    mean_intensity: str = "mean_intensity"
+    edge_density: str = "edge_density"
+
 
 # A registry to hold all functions that return a score
 METRIC_REGISTRY: Dict[str, Callable] = {}
@@ -14,7 +35,7 @@ def metric(func):
 
 def all_quads(state: Dict) -> Dict:
     """Processes all registered scoring metrics for all quads."""
-    image = state.get("current_image")
+    image = state.get("raw_frame")
     quads = state.get("quads", [])
 
     if image is None or not quads:
