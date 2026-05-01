@@ -9,10 +9,23 @@ import config
 
 
 def get_step_name(step):
-    """Extracts 'module.function' name from a function or partial."""
+    """Extracts 'module.function' name and appends partial arguments if they exist."""
+    # 1. Identify the base function
     base_func = step.func if hasattr(step, 'func') else step
     module_short = base_func.__module__.split('.')[-1]
-    return f"{module_short}.{base_func.__name__}"
+    name = f"{module_short}.{base_func.__name__}"
+
+    # 2. If it's a partial, append the arguments to the name
+    if hasattr(step, 'keywords') and step.keywords:
+        # Create a string of key=val, filtered for simple types
+        args_str = "|".join([
+            f"{k}={v}" for k, v in step.keywords.items()
+            if isinstance(v, (str, int, float, bool))
+        ])
+        if args_str:
+            name = f"{name}({args_str})"
+
+    return name
 
 
 def get_ts_str(ts):
