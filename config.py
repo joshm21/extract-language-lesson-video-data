@@ -3,7 +3,6 @@ from functools import partial
 from core import (load, timestamps, extract, prepare,
                   detect, score, filter as filt, crop, dedupe)
 
-
 # --- 1. DATA SCOPE ---
 # Which videos are we running?
 VIDEOS = load.test_video
@@ -32,16 +31,18 @@ FRAME_PIPELINE = [
     partial(detect.find_quads, min_area=50, epsilon=0.03),
     score.all_quads,
 
-    partial(filt.area, min=4000),
+    partial(filt.apply, prop=score.props.area, min=4000),
 
     crop.passed_quads
-
-
 ]
 
 # --- 4. VIDEO POST-PROCESSING ---
 # What happens once after all frames in a video are processed?
 VIDEO_POST_PROCESS = partial(dedupe.get_unique, threshold=20)
 
-#   clustering (k clusters)
-#   selecting (selecting right cluster)
+
+# --- 5. EXECUTION SETTINGS ---
+# Options: "DEBUG", "INFO", "WARNING", "ERROR"
+LOG_LEVEL = "DEBUG"
+# Set to False if you only want the final results, not intermediate steps
+SAVE_ARTIFACTS = True

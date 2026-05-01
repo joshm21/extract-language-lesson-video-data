@@ -4,6 +4,7 @@ import cv2
 import csv
 from pathlib import Path
 from datetime import datetime
+import logging
 import config
 
 
@@ -25,12 +26,20 @@ class Runner:
         self.timer_strategy = config.TIMESTAMPS
         self.frame_steps = config.FRAME_PIPELINE
         self.post_process = config.VIDEO_POST_PROCESS
+        # 1. Setup Logging based on config
+        log_level = getattr(config, "LOG_LEVEL", "INFO").upper()
+        logging.basicConfig(
+            level=getattr(logging, log_level),
+            format='%(message)s',
+            handlers=[logging.StreamHandler()]
+        )
+        self.logger = logging.getLogger(__name__)
 
         self.base_data_dir = Path("./data")
         self.run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     def run(self):
-        print(f"🚀 Starting Workshop Run: {self.run_id}")
+        self.logger.info(f"\n🚀 Starting Run {self.run_id}")
 
         # 1. SCOPE: Identify which videos to process
         discovery_state = {"data_dir": self.base_data_dir}
@@ -40,7 +49,8 @@ class Runner:
             self._process_video(v_id)
 
     def _process_video(self, video_id):
-        print(f"\n🎬 Processing Video: {video_id}")
+        self.logger.info("-" * 40)
+        self.logger.info(f"🎬 Processing Video: {video_id}")
 
         # Setup Video-specific Directories
         video_dir = self.base_data_dir / video_id
@@ -58,7 +68,7 @@ class Runner:
 
         # 3. FRAME LOOP
         for ts in timestamps:
-            print(f"  🕒 @ {get_ts_str(ts)}s")
+            self.logger.debug(f"  🕒 @ {get_ts_str(ts)}s")
 
             # Initial state for this frame
             state = {
@@ -70,7 +80,7 @@ class Runner:
 
             for idx, step in enumerate(self.frame_steps, start=1):
                 name = get_step_name(step)
-                print(f"    [Step {idx:02d}] {name}")
+                self.logger.debug(f"    [Step {idx:02d}] {name}")
                 updates = step(state)
                 if updates:
                     state.update(updates)
@@ -82,16 +92,19 @@ class Runner:
 
         # 4. POST-FRAME: Deduplicate all crops found in this video
         if all_video_crops and self.post_process:
-            print(
-                f"  ✨ Finalizing: Deduplicating {len(all_video_crops)} crops")
+            self.logger.debug(
+                f"  ✨ Deduplicating {len(all_video_crops)} crops found across all frames.")
             unique_crops = self.post_process(all_video_crops)
             self._save_final_results(artifacts_dir, unique_crops)
 
     def _handle_auto_save(self, state, idx, step_name):
         """
-        Checks for an 'auto_save' key. Saves images or 2D lists,
-        then clears the key.
+        Saves images or 2D lists 'auto_save' key, then clears the key.
+        Only saves if CONFIG.SAVE_ARTIFACTS != True
         """
+        if not getattr(config, "SAVE_ARTIFACTS", True):
+            return
+
         data = state.get("auto_save")
         if data is None:
             return
@@ -125,12 +138,12 @@ class Runner:
         Saves the de-duplicated crops with incrementing indices.
         """
         if not unique_crops:
-            print("  ⚠️ No unique crops found to save.")
+            self.logger.warn("  ⚠️  No unique crops found to save.")
             return
 
-        print(
-            f"  💾 Saving {len(unique_crops)} unique cards to {artifacts_dir}")
-
+        self.logger.info(
+            f"  🏁 Finished: {len(unique_crops)} unique cards found.")
+        self.logger.info(f"  📂 Folder: {str(artifacts_dir)}")
         for i, crop_img in enumerate(unique_crops):
             # Format: unique_00.jpg, unique_01.jpg, etc.
             filename = f"unique_{i:02d}.jpg"
@@ -140,4 +153,7 @@ class Runner:
 
 if __name__ == "__main__":
     runner = Runner()
+    runner.run()
+    runner.run()
+    runner.run()
     runner.run()
