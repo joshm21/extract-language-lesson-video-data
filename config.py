@@ -1,7 +1,7 @@
 from functools import partial
 
 from core import (load, timestamps, extract, prepare,
-                  detect, score, filter as filt, crop, dedupe)
+                  detect, score, filter as filt, cluster, crop, dedupe)
 
 # --- 1. DATA SCOPE ---
 # Which videos are we running?
@@ -31,7 +31,9 @@ FRAME_PIPELINE = [
     partial(detect.find_quads, min_area=50, epsilon=0.03),
     score.all_quads,
 
-    partial(filt.apply, prop=score.props.area, min=4000),
+    # partial(filt.apply, prop=score.props.area, min=4000),
+    partial(cluster.k_means, k=2, features=[
+            score.props.area], select_max=score.props.area),
 
     crop.passed_quads
 ]
@@ -42,7 +44,7 @@ VIDEO_POST_PROCESS = partial(dedupe.get_unique, threshold=20)
 
 
 # --- 5. EXECUTION SETTINGS ---
-# Options: "DEBUG", "INFO", "WARNING", "ERROR"
+# Options from most to least verbose: "DEBUG", "INFO", "WARNING", "ERROR"
 LOG_LEVEL = "DEBUG"
 # Set to False if you only want the final results, not intermediate steps
 SAVE_ARTIFACTS = True
