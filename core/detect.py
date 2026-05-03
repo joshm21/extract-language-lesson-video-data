@@ -23,28 +23,35 @@ def find_quads(state: Dict, min_area: int = 1000, epsilon: float = 0.02) -> Dict
         binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
 
-    quads_list = []
-    labels_list = []
-
-    # 1. Detection Logic
+    # 1. Detection Logic: Collect all quads first without labeling
+    found_quads = []
     for cnt in contours:
         if cv2.contourArea(cnt) > min_area:
             peri = cv2.arcLength(cnt, True)
             approx = cv2.approxPolyDP(cnt, epsilon * peri, True)
-
             if len(approx) == 4:
-                quads_list.append(approx)
-                # Use the 0-based index as the label
-                labels_list.append(str(len(quads_list) - 1))
+                found_quads.append(approx)
 
-    # 2. Prepare the data for the visualization function
+    # 2. Sorting Logic: Top-to-Bottom, then Left-to-Right
+    # We use the top-left (y, x) of the bounding box as the sorting key
+    def get_sort_key(q):
+        x, y, w, h = cv2.boundingRect(q)
+        # Trick: Rounding y helps group cards into the same 'row' if the table is slightly tilted
+        return (y // 100, x)
+        # return (y, x)
+
+    quads_list = sorted(found_quads, key=get_sort_key)
+
+    # 3. Labeling Logic: Assign IDs based on the NEW sorted order
+    labels_list = [str(i) for i in range(len(quads_list))]
+
+    # 4. Prepare data for visualization[cite: 4]
     quad_group: viz.QuadGroup = {
         "quads": quads_list,
         "labels": labels_list,
-        "color": (0, 255, 0)  # Green text and borders
+        "color": (0, 255, 0)
     }
 
-    # 3. Use the visualize function to create the debug image
     debug_img = viz.draw_multiple_quad_groups(raw_frame, [quad_group])
 
     return {
