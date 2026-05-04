@@ -3,54 +3,77 @@ import numpy as np
 from typing import Optional, Dict
 
 
-def calculate_sharpness(state: Dict) -> Dict:
+import cv2
+import numpy as np
+from typing import Dict
+
+
+def get_sharpness_score(frame: np.ndarray) -> float:
     """
-    Evaluates the sharpness of a frame using the Laplacian variance.
-    Higher values generally indicate a sharper, more 'in-focus' image.
+    Stand-alone helper to evaluate frame sharpness.
+    Uses Laplacian variance: higher = sharper.
     """
-    # Pull image from state; assume we use 'raw_frame' if available
-    image = state.get("raw_frame")
-    if image is None:
-        return {}
+    if frame is None:
+        return 0.0
 
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-
-    # The Laplacian highlights regions of rapid intensity change (edges)
-    sharpness_val = cv2.Laplacian(gray, cv2.CV_64F).var()
-
-    return {"sharpness": sharpness_val}
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    return cv2.Laplacian(gray, cv2.CV_64F).var()
 
 
-def at_current_timestamp(state: Dict) -> Dict:
+def at_sharpest_in_window(state: Dict, window_seconds: float = 1.0) -> Dict:
     """
-    Extracts a single frame from a VideoCapture object at a specific time.
-
-    Args:
-        cap: An open cv2.VideoCapture object.
-        timestamp: The time in seconds where the frame should be extracted.
-
-    Returns:
-        The frame as a numpy array, or None if the timestamp is out of bounds.
+    Finds the sharpest frame within a +/- window of the target timestamp.
+    Handles edge cases to prevent seeking outside video bounds.
     """
-    # Pull required context from state
     data_dir = state["data_dir"]
     video_id = state["video_id"]
-    timestamp = state["timestamp"]
+    target_ts = state["timestamp"]
 
     video_path = data_dir / video_id / "video.mp4"
     cap = cv2.VideoCapture(str(video_path))
 
-    # Convert seconds to milliseconds for OpenCV
-    cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000.0)
+    if not cap.isOpened():
+        return {}
 
-    success, frame = cap.read()
-    cap.release()  # Ensure resource is freed
+    # 1. Calculate Bounds & Metadata
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    duration = total_frames / fps
 
-    if success:
-        # Trigger auto_save for the workshop
-        return {"raw_frame": frame, "current_image": frame, "auto_save": frame}
+    start_time = max(0, target_ts - window_seconds)
+    end_time = min(duration, target_ts + window_seconds)
+
+    # 2. Iterate and Score
+    # Sampling 10 times per second (0.1s steps) is a good performance/quality trade-off
+    step = 0.1
+    curr_time = start_time
+
+    best_frame = None
+    best_score = -1.0
+    best_ts = target_ts
+
+    while curr_time <= end_time:
+        cap.set(cv2.CAP_PROP_POS_MSEC, curr_time * 1000.0)
+        success, frame = cap.read()
+
+        if success:
+            score = get_sharpness_score(frame)
+            if score > best_score:
+                best_score = score
+                best_frame = frame
+                best_ts = curr_time
+
+        curr_time += step
+
+    cap.release()
+
+    # 3. Update State
+    if best_frame is not None:
+        return {
+            "raw_frame": best_frame,
+            "current_image": best_frame,
+            "auto_save": best_frame,
+            "timestamp": best_ts,
+        }
 
     return {}
