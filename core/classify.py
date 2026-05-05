@@ -52,7 +52,9 @@ def knn(
     X_test_norm = (current_data - x_min) / (x_max - x_min + 1e-6)
 
     # 3. Predict Probabilities
-    model = KNeighborsClassifier(n_neighbors=k)
+    # Ensure k is at least 1 and never more than the number of training samples
+    effective_k = max(1, min(k, len(X_train_norm)))
+    model = KNeighborsClassifier(n_neighbors=effective_k)
     model.fit(X_train_norm, y_train)
 
     # Get probability for each class (returns a matrix: [samples, classes])

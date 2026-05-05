@@ -48,7 +48,10 @@ def k_means(
     X_norm = (X - x_min) / (x_max - x_min + 1e-6)
 
     # 3. Perform Clustering
-    model = KMeans(n_clusters=k, n_init=10, random_state=42)
+    # Ensure k never exceeds the number of available samples
+    effective_k = min(k, len(X_norm))
+
+    model = KMeans(n_clusters=effective_k, n_init=10, random_state=42)
     labels = model.fit_predict(X_norm)
 
     # 4. Determine Target Cluster
