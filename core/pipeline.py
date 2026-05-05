@@ -62,7 +62,8 @@ class Runner:
         logging.basicConfig(
             level=getattr(logging, log_level),
             format='%(message)s',
-            handlers=[logging.StreamHandler()]
+            handlers=[logging.StreamHandler()],
+            force=True
         )
         self.logger = logging.getLogger(__name__)
 
