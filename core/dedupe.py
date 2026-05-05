@@ -51,6 +51,25 @@ def is_duplicate(current_hash: np.ndarray, seen_hashes: List[np.ndarray], thresh
 
 
 def get_unique(all, threshold: int = 20):
+    """
+    Filters a list of images to remove perceptual duplicates based on Hamming distance.
+
+    This function iterates through a collection of images, computes a pHash for each, 
+    and compares it against hashes of images already deemed unique. If an image's 
+    hash is sufficiently different from all previously seen hashes (exceeding the 
+    specified threshold), it is added to the unique set.
+
+    Args:
+        all_images: A list of image arrays (numpy ndarrays) to be filtered.
+        threshold: The maximum Hamming distance allowed to consider two images 
+            as duplicates. A higher threshold is more aggressive at filtering 
+            out "similar" images, while a lower threshold requires images to 
+            be more nearly identical to be skipped.
+
+    Returns:
+        A list of images where each entry is perceptually unique relative to 
+        the others in the list.
+    """
     unique = []
     seen = []
     for img in all:

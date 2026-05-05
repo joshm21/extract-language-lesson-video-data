@@ -8,19 +8,43 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class props:
-    """Namespace for metric names to provide autocomplete in config."""
+    """Namespace for metric names to provide autocomplete and definitions."""
+
     aspect_ratio: str = "aspect_ratio"
+    """Ratio of width to height of the bounding rect."""
+
     extent: str = "extent"
+    """Ratio of contour area to bounding rectangle area."""
+
     solidity: str = "solidity"
+    """Ratio of contour area to convex hull area."""
+
     convexity: str = "convexity"
+    """Returns 1.0 if the shape is convex, 0.0 otherwise."""
+
     area: str = "area"
+    """Returns the absolute area of the contour in pixels."""
+
     relative_area: str = "relative_area"
+    """Returns the quad area as a percentage of the total frame area."""
+
     equivalent_diameter: str = "equivalent_diameter"
+    """Diameter of the circle with the same area as the contour."""
+
     orientation: str = "orientation"
+    """Returns the rotation angle using the Minimum Area Rectangle."""
+
     color_variance: str = "color_variance"
+    """Mean of standard deviations across color channels."""
+
     saturation_average: str = "saturation_average"
+    """Average saturation within the quad (detects color vs grayscale)."""
+
     mean_intensity: str = "mean_intensity"
+    """Calculates average grayscale intensity within the contour mask."""
+
     edge_density: str = "edge_density"
+    """Returns the density of Canny edges within the quad bounding box."""
 
 
 # A registry to hold all functions that return a score
