@@ -5,6 +5,7 @@ import csv
 from pathlib import Path
 from datetime import datetime
 import logging
+import re
 import config
 
 
@@ -18,10 +19,14 @@ def get_step_name(step):
     # 2. If it's a partial, append the arguments to the name
     if hasattr(step, 'keywords') and step.keywords:
         # Create a string of key=val, filtered for simple types
-        args_str = "~".join([
-            f"{k}={v}" for k, v in step.keywords.items()
-            if isinstance(v, (str, int, float, bool))
-        ])
+        args_list = []
+        for k, v in step.keywords.items():
+            if isinstance(v, (str, int, float, bool)):
+                # Sanitize value: replace slashes and backslashes with underscores
+                safe_v = re.sub(r'[\\/]', '_', str(v))
+                args_list.append(f"{k}={safe_v}")
+
+        args_str = "~".join(args_list)
         if args_str:
             name = f"{name}({args_str})"
 
