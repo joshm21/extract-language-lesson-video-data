@@ -37,6 +37,7 @@ def at_sharpest_in_window(state: Dict, window_seconds: float = 0.5) -> Dict:
 
     if not cap.isOpened():
         print(f"Failed to open video at: {video_path}")
+        cap.release()
         return {}
 
     fps = cap.get(cv2.CAP_PROP_FPS)

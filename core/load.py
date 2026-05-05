@@ -1,6 +1,5 @@
 from pathlib import Path
-
-DEFAULT_DATA_DIR = Path("./data")
+DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 def test_video(state):

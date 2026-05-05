@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from typing import Dict, List, Optional, Any
 from . import visualize as viz
-from core.score import props
+from .score import props
 
 
 def k_means(

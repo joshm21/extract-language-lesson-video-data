@@ -3,7 +3,7 @@ import numpy as np
 import io
 import cv2
 from typing import Dict, Any, List
-from core.score import props
+from .score import props
 
 import logging
 # Silence the technical 'STREAM' chatter from image backends

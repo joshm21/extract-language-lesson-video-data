@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 from typing import Dict, List, Any
 from . import visualize as viz
-from core.score import props
+from .score import props
 
 
 def knn(
