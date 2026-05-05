@@ -1,0 +1,167 @@
+PARAMS
+=================
+POPULATION_SIZE = 20
+ELITE_SURVIVORS = 0.1
+ELITISM_COUNT = max(1, round(POPULATION_SIZE * ELITE_SURVIVORS))
+GENERATIONS = 10
+MUTATION_RATE_STRUCTURAL = 0.30
+MUTATION_RATE_ARG = 0.30
+
+expected_count = int(row.get('full', 0))
+
+RESULTS
+=================
+
+Max Possible Fitness Score: 8000
+=== GENERATION STATS ===
+Gen 01 | Avg Fitness:  3865 | Best Fitness:  6130 
+Gen 02 | Avg Fitness:  3561 | Best Fitness:  6130 
+Gen 03 | Avg Fitness:  2938 | Best Fitness:  6130 
+Gen 04 | Avg Fitness:  2762 | Best Fitness:  6130 
+Gen 05 | Avg Fitness:  2688 | Best Fitness:  6130 
+Gen 06 | Avg Fitness:  3675 | Best Fitness:  6130 
+Gen 07 | Avg Fitness:  3282 | Best Fitness:  6130 
+Gen 08 | Avg Fitness:  2957 | Best Fitness:  6130 
+Gen 09 | Avg Fitness:  3781 | Best Fitness:  6130 
+Gen 10 | Avg Fitness:  3994 | Best Fitness:  6180  
+
+========================================
+EVOLUTION COMPLETE - GENOMES BY RANK
+========================================
+
+[RANK 1] Fitness: 6180/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=61, high=200)
+  4. do_dilation(kernel_size=3, iterations=1)
+  5. find_quads(min_area=1087, epsilon=0.042)
+
+[RANK 2] Fitness: 6130/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=61, high=200)
+  4. do_dilation(kernel_size=3, iterations=1)
+  5. find_quads(min_area=1052, epsilon=0.041)
+
+[RANK 3] Fitness: 6130/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=61, high=200)
+  4. do_dilation(kernel_size=3, iterations=1)
+  5. find_quads(min_area=1052, epsilon=0.041)
+
+[RANK 4] Fitness: 6130/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=61, high=200)
+  4. do_dilation(kernel_size=3, iterations=1)
+  5. find_quads(min_area=1053, epsilon=0.041)
+
+[RANK 5] Fitness: 6130/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=61, high=200)
+  4. do_dilation(kernel_size=3, iterations=1)
+  5. find_quads(min_area=1052, epsilon=0.041)
+
+[RANK 6] Fitness: 5890/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=57, high=155)
+  4. do_dilation(kernel_size=3, iterations=1)
+  5. find_quads(min_area=1053, epsilon=0.039)
+
+[RANK 7] Fitness: 5240/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=61, high=200)
+  4. do_dilation(kernel_size=7, iterations=1)
+  5. find_quads(min_area=1008, epsilon=0.036)
+
+[RANK 8] Fitness: 4750/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=61, high=190)
+  4. do_dilation(kernel_size=1, iterations=1)
+  5. find_quads(min_area=1052, epsilon=0.037)
+
+[RANK 9] Fitness: 4530/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=0, high=158)
+  4. do_dilation(kernel_size=1, iterations=2)
+  5. do_dilation(kernel_size=1, iterations=1)
+  6. find_quads(min_area=1068, epsilon=0.040)
+
+[RANK 10] Fitness: 4500/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=7)
+  3. at_canny_edges(low=0, high=158)
+  4. do_dilation(kernel_size=1, iterations=3)
+  5. do_dilation(kernel_size=1, iterations=1)
+  6. find_quads(min_area=1068, epsilon=0.041)
+
+[RANK 11] Fitness: 4450/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_canny_edges(low=0, high=158)
+  4. do_dilation(kernel_size=1, iterations=3)
+  5. find_quads(min_area=1051, epsilon=0.034)
+
+[RANK 12] Fitness: 4350/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=3)
+  3. at_canny_edges(low=61, high=200)
+  4. do_dilation(kernel_size=1, iterations=1)
+  5. find_quads(min_area=1068, epsilon=0.037)
+
+[RANK 13] Fitness: 2600/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=7)
+  3. at_canny_edges(low=54, high=194)
+  4. do_dilation(kernel_size=1, iterations=2)
+  5. find_quads(min_area=1068, epsilon=0.037)
+
+[RANK 14] Fitness: 2510/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=7)
+  3. at_canny_edges(low=56, high=197)
+  4. do_dilation(kernel_size=1, iterations=3)
+  5. find_quads(min_area=1141, epsilon=0.033)
+
+[RANK 15] Fitness: 1990/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=7)
+  3. at_adaptive_threshold(block_size=15, c_val=3)
+  4. do_dilation(kernel_size=3, iterations=1)
+  5. find_quads(min_area=1071, epsilon=0.040)
+
+[RANK 16] Fitness: 1960/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_adaptive_threshold(block_size=15, c_val=3)
+  4. find_quads(min_area=1012, epsilon=0.040)
+
+[RANK 17] Fitness: 1840/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_adaptive_threshold(block_size=15, c_val=3)
+  4. find_quads(min_area=1052, epsilon=0.038)
+
+[RANK 18] Fitness: 1680/8000
+  1. to_grayscale()
+  2. at_adaptive_threshold(block_size=15, c_val=3)
+  3. do_dilation(kernel_size=1, iterations=1)
+  4. find_quads(min_area=1086, epsilon=0.040)
+
+[RANK 19] Fitness: 1480/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=5)
+  3. at_adaptive_threshold(block_size=13, c_val=4)
+  4. do_dilation(kernel_size=3, iterations=3)
+  5. find_quads(min_area=1127, epsilon=0.037)
+
+[RANK 20] Fitness: 1420/8000
+  1. to_grayscale()
+  2. to_blurred(ksize=3)
+  3. find_quads(min_area=1056, epsilon=0.037)
