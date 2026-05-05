@@ -4,7 +4,7 @@ from typing import Dict
 from . import visualize as viz
 
 
-def find_quads(state: Dict, min_area: int = 1000, epsilon: float = 0.02) -> Dict:
+def find_quads(state: Dict, min_area: int = 300, epsilon: float = 0.02) -> Dict:
     """
     Identifies 4-sided polygons and labels them with a unique ID index.
 
