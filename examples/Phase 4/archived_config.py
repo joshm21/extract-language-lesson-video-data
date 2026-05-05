@@ -6,8 +6,8 @@ from core import extract
 from core import prepare
 from core import detect
 from core import score
-from core import plot
-from core import filter as filt
+# from core import plot
+# from core import filter as filt
 # from core import cluster
 from core import classify
 from core import crop
@@ -34,9 +34,12 @@ FRAME_PIPELINE = [
     partial(detect.find_quads, min_area=50, epsilon=0.03),
     score.all_quads,
 
-    partial(classify.knn, train_csv="examples/Phase 4/labeled.csv", k=3,
-            features=[score.props.area,], target_label=1, threshold=0.5),
-
+    partial(classify.knn,
+            train_csv="examples/Phase 4/labeled.csv",
+            k=3,
+            features=[score.props.area,],
+            target_label=1,
+            threshold=0.5),
 
     crop.passed_quads
 ]
