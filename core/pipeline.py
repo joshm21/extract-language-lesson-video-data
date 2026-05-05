@@ -63,8 +63,32 @@ class Runner:
         discovery_state = {"data_dir": self.base_data_dir}
         video_ids = self.video_selector(discovery_state)["video_ids"]
 
+        all_results = []
+
         for v_id in video_ids:
-            self._process_video(v_id)
+            metrics = self._process_video(v_id)
+            all_results.append((v_id, *metrics))
+
+        # print final results
+        width = 40  # Accommodates your long IDs
+        header = f"{'Video ID':<{width}} | {'Goal':^6} | {'Found':^6} | {'Prec':^6} | {'Rec':^6} | {'F1 Score'}"
+
+        print("\n" + "=" * len(header))
+        print(f"📊 PIPELINE PERFORMANCE REPORT ({self.run_id})")
+        print("-" * len(header))
+        print(header)
+        print("-" * len(header))
+
+        total_f1 = 0
+        for v_id, f1, g_c, f_c, prec, rec in all_results:
+            print(
+                f"{v_id:<{width}} | {g_c:^6} | {f_c:^6} | {prec:>5.1f}% | {rec:>5.1f}% | {f1:>8.2f}%")
+            total_f1 += f1
+
+        avg_accuracy = total_f1 / len(all_results) if all_results else 0
+        print("-" * len(header))
+        print(f"{'OVERALL PIPELINE F1 SCORE:':<{width + 30}} {avg_accuracy:>8.2f}%")
+        print("=" * len(header))
 
     def _process_video(self, video_id):
         self.logger.info("-" * 40)
@@ -109,11 +133,21 @@ class Runner:
                 all_video_crops.extend(state["crops"])
 
         # 4. POST-FRAME: Deduplicate all crops found in this video
+        metrics = (0.0, 0, 0, 0.0, 0.0)  # Default empty metrics
         if all_video_crops and self.post_process:
             self.logger.debug(
                 f"  ✨ Deduplicating {len(all_video_crops)} crops found across all frames.")
             unique_crops = self.post_process(all_video_crops)
             self._save_final_results(artifacts_dir, unique_crops)
+
+            metrics = self._calculate_accuracy(video_id, unique_crops)
+            report_path = artifacts_dir / "results.txt"
+            report_content = self._format_single_report(video_id, metrics)
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write(report_content)
+            self.logger.info(f"  📝 Local report saved: {report_path}")
+
+        return metrics
 
     def _handle_auto_save(self, state, idx, step_name):
         """
@@ -167,3 +201,56 @@ class Runner:
             filename = f"unique_{i:02d}.jpg"
             save_path = artifacts_dir / filename
             cv2.imwrite(str(save_path), crop_img)
+
+    def _format_single_report(self, video_id, metrics):
+        """Standardizes the string format for one video's performance."""
+        f1, g_c, f_c, prec, rec = metrics
+        width = 40
+        header = f"{'Video ID':<{width}} | {'Goal':^6} | {'Found':^6} | {'Prec':^6} | {'Rec':^6} | {'F1 Score'}"
+        row = f"{video_id:<{width}} | {g_c:^6} | {f_c:^6} | {prec:>5.1f}% | {rec:>5.1f}% | {f1:>8.2f}%"
+
+        return f"{header}\n{'-' * len(header)}\n{row}\n"
+
+    def _calculate_accuracy(self, video_id: str, found_crops: list):
+        """
+        Compares found crops against images in data/{video-id}/goal.
+        Penalizes extra 'junk' images using Precision logic.
+        """
+        from core.dedupe import compute_phash, is_duplicate  #
+
+        goal_dir = self.base_data_dir / video_id / "goal"  #
+        if not goal_dir.exists():
+            return 0.0, 0, len(found_crops), 0.0, 0.0
+
+        goal_files = list(goal_dir.glob("*.jpg"))
+        if not goal_files:
+            # If goal is empty but you found images, Precision is 0%
+            return 0.0, 0, len(found_crops), 0.0, 0.0
+
+        # 1. Generate hashes for comparison
+        goal_hashes = [compute_phash(cv2.imread(str(p)))
+                       for p in goal_files]  #
+        found_hashes = [compute_phash(img) for img in found_crops]  #
+
+        # 2. Count Matches (True Positives)
+        matches = 0
+        for g_h in goal_hashes:
+            # Did we find this specific goal image in our results?
+            if is_duplicate(g_h, found_hashes, threshold=15):  #
+                matches += 1
+
+        # 3. Calculate Metrics
+        # Recall: Did you find all the goals? (Matches / Goal Count)
+        recall = (matches / len(goal_hashes)) * 100
+
+        # Precision: Is your output clean? (Matches / Total Found)
+        # This is what penalizes you if 'Found' is much higher than 'Goal'
+        precision = (matches / len(found_hashes)) * 100 if found_hashes else 0
+
+        # F1: The balanced score
+        if (precision + recall) > 0:
+            f1 = 2 * (precision * recall) / (precision + recall)
+        else:
+            f1 = 0
+
+        return f1, len(goal_hashes), len(found_hashes), precision, recall
