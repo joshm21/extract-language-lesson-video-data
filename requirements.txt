@@ -1,0 +1,5 @@
+matplotlib==3.10.9
+opencv-python==4.13.0.92
+pip==23.0.1
+scikit-learn==1.8.0
+setuptools==66.1.1
