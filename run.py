@@ -18,5 +18,5 @@ def cleanup_runs(base_data_dir="./data"):
 
 
 if __name__ == "__main__":
-    cleanup_runs()  # use this to delete all */artifacts/run_* folders
+    # cleanup_runs()  # use this to delete all */artifacts/run_* folders
     run()

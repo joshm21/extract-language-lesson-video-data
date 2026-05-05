@@ -1,7 +1,17 @@
 from functools import partial
 
-from core import (load, timestamps, extract, prepare,
-                  detect, score, filter as filt, cluster, crop, dedupe)
+from core import load
+from core import timestamps
+from core import extract
+from core import prepare
+from core import detect
+from core import score
+from core import plot
+from core import filter as filt
+# from core import cluster
+# from core import classify
+from core import crop
+from core import dedupe
 
 # --- 1. DATA SCOPE ---
 # Which videos are we running?
@@ -9,32 +19,31 @@ VIDEOS = load.test_video
 
 # --- 2. SAMPLING STRATEGY ---
 # How do we pick timestamps for each video?
-TIMESTAMPS = partial(timestamps.every_n_seconds, n=20)
+TIMESTAMPS = partial(timestamps.uniform, count=1)
 
 # --- 3. THE FRAME PIPELINE ---
 # What happens to every single extracted frame?
 FRAME_PIPELINE = [
-    extract.at_current_timestamp,
+    # get a clear frame
+    partial(extract.at_sharpest_in_window, window_seconds=0.5),
 
-    #    prepare.to_grayscale,
-    #    partial(prepare.to_blurred, ksize=5),
-    #    partial(prepare.at_adaptive_threshold,
-    #            block_size=15, c_val=5),
-    #    partial(prepare.do_closing, kernel_size=3),
-
+    # pre-process
     prepare.to_grayscale,
     partial(prepare.to_blurred, ksize=3),
     partial(prepare.at_canny_edges, low=50, high=200),
     partial(prepare.do_dilation, kernel_size=3, iterations=1),
-    partial(prepare.do_closing, kernel_size=10),
 
+    # detect, score, visualize
     partial(detect.find_quads, min_area=50, epsilon=0.03),
     score.all_quads,
+    partial(plot.feature_space,
+            x_axis=score.props.area,
+            y_axis=score.props.aspect_ratio),
 
-    # partial(filt.apply, prop=score.props.area, min=4000),
-    partial(cluster.k_means, k=2, features=[
-            score.props.area], select_max=score.props.area),
+    # filter detected cards
+    partial(filt.apply, prop=score.props.area, min=4000),
 
+    # crop quads that passed filters
     crop.passed_quads
 ]
 

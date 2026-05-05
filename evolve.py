@@ -1,26 +1,36 @@
-print("starting...")
-import os
-import re
-import cv2
-import csv
-import copy
-import random
+from core import detect
+from core import prepare
+import config
 from functools import partial
+import random
+import copy
+import csv
+import cv2
+import os
+print("starting...")
 
 # Import workshop modules
-import config
-from core import prepare
-from core import detect
 
 # --- CONFIGURATION VARIABLES ---
 FRAMES_DIR = "training_frames"
 DATA_CSV = "data.csv"
-POPULATION_SIZE = 50 # how many config "genomes" to try?
-GENERATIONS = 15 # how many times to evaluate and evolve?
-ELITISM_COUNT = 5 # how many genomes with best scores make it to next generation with no mutations?
 
-MUTATION_RATE_STRUCTURAL = 0.20 # how likely functions are added, removed, or swapped?
-MUTATION_RATE_ARG = 0.30 # how likely function arg values are mutated?
+VIDEO_ID = None  # which video_id to train against, or all if = None
+# VIDEO_ID = "14QbqkeiSDtU62syzgaOVXhXRzBJWhaNN"
+
+# how many config "genomes" / configs to try?
+POPULATION_SIZE = 20
+# percent of best scores that always make it to the next generation with no mutations
+ELITE_SURVIVORS = 0.1
+# ensure we have at least one survivor
+ELITISM_COUNT = max(1, round(POPULATION_SIZE * ELITE_SURVIVORS))
+# how many times to evaluate and evolve?
+GENERATIONS = 15
+
+# how likely functions are added, removed, or swapped?
+MUTATION_RATE_STRUCTURAL = 0.30
+# how likely function arg values are mutated?
+MUTATION_RATE_ARG = 0.30
 
 # --- GENE POOLS & CONSTRAINTS ---
 POOLS = {
@@ -48,10 +58,9 @@ DEFAULT_PARAMS = {
 def load_cached_frames(directory, csv_filename):
     """Loads images into RAM and parses expected quad counts from data.csv."""
     frames = []
-    
+
     csv_path = os.path.join(directory, csv_filename)
 
-    
     if not os.path.exists(csv_path):
         print(f"ERROR: CSV {csv_path} not found.")
         return frames
@@ -64,9 +73,15 @@ def load_cached_frames(directory, csv_filename):
                 return frames
             filepath = row['filename']
 
+            # filter out if not our focus video
+            if VIDEO_ID:
+                if VIDEO_ID not in filepath:
+                    continue
+
             # Parse full + partial columns
             # could change this to include any combination of 'full', 'covered', and 'partial' columns
-            expected_count = int(row.get('full', 0)) + int(row.get('partial', 0))
+            # expected_count = int(row.get('full', 0)) + int(row.get('partial', 0))
+            expected_count = int(row.get('full', 0))
 
             # resizing images to improve speed without losing too much accuracy
             img = cv2.imread(filepath)
@@ -75,9 +90,11 @@ def load_cached_frames(directory, csv_filename):
                 scale = 640 / img.shape[1]
                 if scale < 1.0:
                     new_size = (640, int(img.shape[0] * scale))
-                    img = cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
-                
-                frames.append({"image": img, "expected": expected_count, "name": filepath})
+                    img = cv2.resize(
+                        img, new_size, interpolation=cv2.INTER_AREA)
+
+                frames.append(
+                    {"image": img, "expected": expected_count, "name": filepath})
     return frames
 
 
@@ -90,7 +107,7 @@ def get_seed_genome():
         "morph": [],
         "detect": [{"func": detect.find_quads, "params": copy.deepcopy(DEFAULT_PARAMS[detect.find_quads])}]
     }
-    
+
     if not hasattr(config, 'FRAME_PIPELINE'):
         return seed
 
@@ -105,8 +122,10 @@ def get_seed_genome():
         elif func in POOLS["morph"]:
             seed["morph"].append({"func": func, "params": params})
         elif func == detect.find_quads:
-            seed["detect"][0]["params"]["min_area"] = params.get("min_area", 300)
-            seed["detect"][0]["params"]["epsilon"] = params.get("epsilon", 0.02)
+            seed["detect"][0]["params"]["min_area"] = params.get(
+                "min_area", 300)
+            seed["detect"][0]["params"]["epsilon"] = params.get(
+                "epsilon", 0.02)
             break
 
     return seed
@@ -117,13 +136,13 @@ def get_random_gene(pool_name):
     """Creates a gene with a random function and randomized initial parameters."""
     func = random.choice(POOLS[pool_name])
     params = copy.deepcopy(DEFAULT_PARAMS[func])
-    
+
     # Randomize each parameter immediately so the gene is unique at birth
     for param in params:
         # We apply multiple nudges or a larger range to ensure diversity
-        for _ in range(random.randint(1, 5)): 
+        for _ in range(random.randint(1, 5)):
             params[param] = nudge_value(param, params[param])
-            
+
     return {"func": func, "params": params}
 
 
@@ -138,7 +157,6 @@ def evaluate(genome, frames):
             # Run the structured pipeline sequentially
             for section in ["pre", "binary", "morph", "detect"]:
                 for gene in genome[section]:
-                    state = gene["func"](state, **gene["params"])
                     updates = gene["func"](state, **gene["params"])
                     if updates:
                         state.update(updates)
@@ -147,11 +165,12 @@ def evaluate(genome, frames):
             expected_count = frame_data["expected"]
 
             # Max 100 per frame. Penalty for missing or hallucinating quads.
-            frame_score = max(0, 100 - (abs(expected_count - detected_count) * 10))
+            frame_score = max(
+                0, 100 - (abs(expected_count - detected_count) * 10))
             total_score += frame_score
 
         except Exception:
-            return 0 # Crash = 0 fitness
+            return 0  # Crash = 0 fitness
 
     return total_score
 
@@ -175,11 +194,11 @@ def nudge_value(param_name, current_val):
         return max(1, new_val)
     elif param_name == "min_area":
         new_val = current_val + random.randint(-50, 50)
-        return max(10, new_val)
+        return max(300, new_val)
     elif param_name == "epsilon":
         new_val = current_val + random.uniform(-0.005, 0.005)
         return max(0.001, min(0.1, new_val))
-        
+
     return current_val
 
 
@@ -189,7 +208,7 @@ def mutate(genome):
 
     # 1. Structural Mutations
     if random.random() < MUTATION_RATE_STRUCTURAL:
-        
+
         # PRE POOL: 0, 1, or 2 functions
         if random.random() < 0.5 and len(mutant["pre"]) > 0:
             mutant["pre"].pop(random.randrange(len(mutant["pre"])))
@@ -198,18 +217,20 @@ def mutate(genome):
             available = [f for f in POOLS["pre"] if f not in existing_funcs]
             if available:
                 func = random.choice(available)
-                mutant["pre"].append({"func": func, "params": copy.deepcopy(DEFAULT_PARAMS[func])})
+                mutant["pre"].append(
+                    {"func": func, "params": copy.deepcopy(DEFAULT_PARAMS[func])})
 
         # BINARY POOL: Exactly 1 or 0 functions
         if mutant["binary"] and random.random() < 0.3:
-            mutant["binary"] = [] # make it None
+            mutant["binary"] = []  # make it None
         else:
             mutant["binary"] = [get_random_gene("binary")]
 
         # MORPH POOL: Any number, any order
         action = random.choice(["add", "remove", "swap"])
         if action == "add":
-            mutant["morph"].insert(random.randint(0, len(mutant["morph"])), get_random_gene("morph"))
+            mutant["morph"].insert(random.randint(
+                0, len(mutant["morph"])), get_random_gene("morph"))
         elif action == "remove" and mutant["morph"]:
             mutant["morph"].pop(random.randrange(len(mutant["morph"])))
         elif action == "swap" and len(mutant["morph"]) >= 2:
@@ -221,7 +242,8 @@ def mutate(genome):
         for gene in mutant[section]:
             if random.random() < MUTATION_RATE_ARG:
                 for param in gene["params"]:
-                    gene["params"][param] = nudge_value(param, gene["params"][param])
+                    gene["params"][param] = nudge_value(
+                        param, gene["params"][param])
 
     return mutant
 
@@ -232,14 +254,14 @@ def crossover(parent1, parent2):
         "pre": copy.deepcopy(parent1["pre"] if random.random() < 0.5 else parent2["pre"]),
         "binary": copy.deepcopy(parent1["binary"] if random.random() < 0.5 else parent2["binary"]),
         "morph": copy.deepcopy(parent1["morph"] if random.random() < 0.5 else parent2["morph"]),
-        "detect": copy.deepcopy(parent1["detect"]) 
+        "detect": copy.deepcopy(parent1["detect"])
     }
-    
+
     # Crossover parameters for the detection function
     for param in child["detect"][0]["params"]:
         if random.random() < 0.5:
             child["detect"][0]["params"][param] = parent2["detect"][0]["params"][param]
-            
+
     return child
 
 
@@ -249,9 +271,9 @@ def run_evolution():
     if not frames:
         return
 
-    frames = frames[:10]  # temporarily reduce number of frames for speed
     max_possible_score = len(frames) * 100
-    
+    print(f"Max Possible Fitness Score: {max_possible_score}")
+
     # Store history for final reporting
     generation_history = []
 
@@ -266,12 +288,13 @@ def run_evolution():
     # 2. Evolution
     for gen in range(GENERATIONS):
         scored_pop = []
-        
+
         # Persistent progress lines
         for i, genome in enumerate(population):
             # The \r keeps these lines updating in place
-            print(f"Evaluating Generation: {gen+1} / {GENERATIONS}, Genome: {i + 1} / {POPULATION_SIZE}    ", end="\r")
-            
+            print(
+                f"Evaluating Generation: {gen+1} / {GENERATIONS}, Genome: {i + 1} / {POPULATION_SIZE}    ", end="\r")
+
             score = evaluate(genome, frames)
             scored_pop.append((score, genome))
 
@@ -279,13 +302,14 @@ def run_evolution():
         scored_pop.sort(key=lambda x: x[0], reverse=True)
         best_score, best_genome = scored_pop[0]
         avg_fitness = sum(x[0] for x in scored_pop) / POPULATION_SIZE
-        
+
         generation_history.append((gen + 1, avg_fitness, best_score))
 
         # Log Generation Stats (this stays in terminal history)
         # Clear the 'Evaluating' line before printing the summary
-        print(" " * 50, end="\r") 
-        print(f"Gen {gen + 1:02d} | Avg Fitness: {avg_fitness:6.1f} | Best Fitness: {best_score:6.1f}")
+        print(" " * 50, end="\r")
+        print(
+            f"Gen {gen + 1:02d} | Avg Fitness: {int(avg_fitness):5d} | Best Fitness: {int(best_score):5d}")
 
         # Selection & Next Generation
         next_gen = []
@@ -303,21 +327,21 @@ def run_evolution():
 
     # --- END OF EVOLUTION LOGGING ---
     print("\n" + "="*40)
-    print("EVOLUTION COMPLETE - TOP 3 GENOMES")
+    print("EVOLUTION COMPLETE - GENOMES BY RANK")
     print("="*40)
-    
+
     # Re-evaluate or just take from the final sorted population
     scored_pop.sort(key=lambda x: x[0], reverse=True)
-    
-    for rank in range(min(3, len(scored_pop))):
+
+    for rank in range(len(scored_pop)):
         score, genome = scored_pop[rank]
         print(f"\n[RANK {rank + 1}] Fitness: {score}/{max_possible_score}")
-        
+
         step_idx = 1
         for section in ["pre", "binary", "morph", "detect"]:
             for gene in genome[section]:
                 func_name = gene['func'].__name__
-                params = ", ".join([f"{k}={v}" if not isinstance(v, float) else f"{k}={v:.3f}" 
+                params = ", ".join([f"{k}={v}" if not isinstance(v, float) else f"{k}={v:.3f}"
                                    for k, v in gene['params'].items()])
                 print(f"  {step_idx}. {func_name}({params})")
                 step_idx += 1
