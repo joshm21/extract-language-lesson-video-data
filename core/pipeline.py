@@ -18,7 +18,7 @@ def get_step_name(step):
     # 2. If it's a partial, append the arguments to the name
     if hasattr(step, 'keywords') and step.keywords:
         # Create a string of key=val, filtered for simple types
-        args_str = "|".join([
+        args_str = "~".join([
             f"{k}={v}" for k, v in step.keywords.items()
             if isinstance(v, (str, int, float, bool))
         ])
@@ -162,11 +162,3 @@ class Runner:
             filename = f"unique_{i:02d}.jpg"
             save_path = artifacts_dir / filename
             cv2.imwrite(str(save_path), crop_img)
-
-
-if __name__ == "__main__":
-    runner = Runner()
-    runner.run()
-    runner.run()
-    runner.run()
-    runner.run()
